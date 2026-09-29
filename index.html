@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
 
   <title>Portfolio Lola Lefevre</title>
 
@@ -17,10 +17,40 @@
       background: #e8e8e8;
     }
 
+    #toolbar {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      z-index: 9999;
+      display: flex;
+      gap: 8px;
+      background: rgba(255,255,255,0.92);
+      padding: 8px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.12);
+    }
+
+    #toolbar button {
+      border: 0;
+      background: #111;
+      color: white;
+      font-size: 18px;
+      width: 42px;
+      height: 42px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    #pdf-wrapper {
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
     #pdf-container {
       width: 100%;
-      max-width: 1600px;
       margin: 0 auto;
+      transform-origin: top left;
     }
 
     canvas {
@@ -41,8 +71,17 @@
 
 <body>
 
+<div id="toolbar">
+  <button id="zoomOut">−</button>
+  <button id="zoomReset">100%</button>
+  <button id="zoomIn">+</button>
+</div>
+
 <div id="loading">Chargement du portfolio…</div>
-<div id="pdf-container"></div>
+
+<div id="pdf-wrapper">
+  <div id="pdf-container"></div>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 
@@ -53,7 +92,29 @@
   const url = "Portfolio.pdf";
 
   const container = document.getElementById("pdf-container");
+  const wrapper = document.getElementById("pdf-wrapper");
   const loading = document.getElementById("loading");
+
+  let zoom = 1;
+
+  function applyZoom() {
+    container.style.width = (zoom * 100) + "%";
+  }
+
+  document.getElementById("zoomIn").onclick = () => {
+    zoom = Math.min(zoom + 0.25, 3);
+    applyZoom();
+  };
+
+  document.getElementById("zoomOut").onclick = () => {
+    zoom = Math.max(zoom - 0.25, 0.75);
+    applyZoom();
+  };
+
+  document.getElementById("zoomReset").onclick = () => {
+    zoom = 1;
+    applyZoom();
+  };
 
   pdfjsLib.getDocument(url).promise.then(async function(pdf) {
 
@@ -66,18 +127,18 @@
       const baseViewport = page.getViewport({ scale: 1 });
 
       const targetWidth = Math.min(
-        window.innerWidth * window.devicePixelRatio,
-        2000
+        window.innerWidth * window.devicePixelRatio * 2.5,
+        5000
       );
 
       const scale = targetWidth / baseViewport.width;
-      const viewport = page.getViewport({ scale: scale });
+      const viewport = page.getViewport({ scale });
 
       const canvas = document.createElement("canvas");
       const context = canvas.getContext("2d");
 
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
+      canvas.width = Math.floor(viewport.width);
+      canvas.height = Math.floor(viewport.height);
 
       container.appendChild(canvas);
 
