@@ -47,51 +47,73 @@
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 
 <script>
-  pdfjsLib.GlobalWorkerOptions.workerSrc =
-    "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
-
   const url = "Portfolio.pdf";
 
-  const container = document.getElementById("pdf-container");
-  const loading = document.getElementById("loading");
+  /*
+   * Sur téléphone, on ouvre directement le PDF.
+   * Cela évite de rendre toutes les pages en canvas,
+   * ce qui est très lourd pour un PDF haute définition.
+   */
+  const isMobile =
+    window.matchMedia("(max-width: 767px)").matches ||
+    /Android|iPhone|iPod/i.test(navigator.userAgent);
 
-  pdfjsLib.getDocument(url).promise.then(async function(pdf) {
+  if (isMobile) {
 
-    loading.style.display = "none";
+    window.location.replace(url);
 
-    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+  } else {
 
-      const page = await pdf.getPage(pageNumber);
+    /*
+     * VERSION ORDINATEUR :
+     * code original conservé.
+     */
 
-      const baseViewport = page.getViewport({ scale: 1 });
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
 
-      const targetWidth = Math.min(
-        window.innerWidth * window.devicePixelRatio,
-        2000
-      );
+    const container = document.getElementById("pdf-container");
+    const loading = document.getElementById("loading");
 
-      const scale = targetWidth / baseViewport.width;
-      const viewport = page.getViewport({ scale: scale });
+    pdfjsLib.getDocument(url).promise.then(async function(pdf) {
 
-      const canvas = document.createElement("canvas");
-      const context = canvas.getContext("2d");
+      loading.style.display = "none";
 
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
+      for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
 
-      container.appendChild(canvas);
+        const page = await pdf.getPage(pageNumber);
 
-      await page.render({
-        canvasContext: context,
-        viewport: viewport
-      }).promise;
-    }
+        const baseViewport = page.getViewport({ scale: 1 });
 
-  }).catch(function(error) {
-    loading.innerHTML =
-      'Impossible de charger le portfolio. <a href="Portfolio.pdf">Ouvrir le PDF</a>';
-    console.error(error);
-  });
+        const targetWidth = Math.min(
+          window.innerWidth * window.devicePixelRatio,
+          2000
+        );
+
+        const scale = targetWidth / baseViewport.width;
+        const viewport = page.getViewport({ scale: scale });
+
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+
+        container.appendChild(canvas);
+
+        await page.render({
+          canvasContext: context,
+          viewport: viewport
+        }).promise;
+      }
+
+    }).catch(function(error) {
+      loading.innerHTML =
+        'Impossible de charger le portfolio. <a href="Portfolio.pdf">Ouvrir le PDF</a>';
+      console.error(error);
+    });
+
+  }
 </script>
 
 </body>
