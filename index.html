@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
 
-  <title>Portfolio Lola Lefevre</title>
+  <title>Lola Lefèvre | Portfolio d’architecture</title>
 
   <style>
     * {
@@ -34,9 +34,10 @@
       border: 0;
       background: #111;
       color: white;
-      font-size: 18px;
-      width: 42px;
+      font-size: 16px;
+      min-width: 42px;
       height: 42px;
+      padding: 0 10px;
       border-radius: 8px;
       cursor: pointer;
     }
@@ -50,14 +51,19 @@
     #pdf-container {
       width: 100%;
       margin: 0 auto;
-      transform-origin: top left;
+    }
+
+    .page {
+      position: relative;
+      width: 100%;
+      background: white;
+      margin: 0 auto 2px auto;
     }
 
     canvas {
       display: block;
       width: 100%;
       height: auto;
-      margin: 0 auto 2px auto;
       background: white;
     }
 
@@ -86,71 +92,170 @@
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 
 <script>
-  pdfjsLib.GlobalWorkerOptions.workerSrc =
-    "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
 
-  const url = "Portfolio.pdf";
+const url = "Portfolio.pdf";
 
-  const container = document.getElementById("pdf-container");
-  const wrapper = document.getElementById("pdf-wrapper");
-  const loading = document.getElementById("loading");
+const container = document.getElementById("pdf-container");
+const loading = document.getElementById("loading");
 
-  let zoom = 1;
+let pdf = null;
+let zoom = 1;
+let pages = [];
+let renderScale = Math.min(window.devicePixelRatio || 1, 2);
 
-  function applyZoom() {
-    container.style.width = (zoom * 100) + "%";
+async function createPages() {
+  const firstPage = await pdf.getPage(1);
+  const firstViewport = firstPage.getViewport({ scale: 1 });
+  const ratio = firstViewport.height / firstViewport.width;
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const holder = document.createElement("div");
+    holder.className = "page";
+    holder.dataset.page = i;
+    holder.style.aspectRatio = `${firstViewport.width} / ${firstViewport.height}`;
+
+    container.appendChild(holder);
+
+    pages.push({
+      number: i,
+      holder: holder,
+      canvas: null,
+      rendered: false,
+      rendering: false
+    });
+  }
+}
+
+async function renderPage(item) {
+  if (item.rendered || item.rendering) return;
+
+  item.rendering = true;
+
+  try {
+    const page = await pdf.getPage(item.number);
+    const baseViewport = page.getViewport({ scale: 1 });
+
+    const cssWidth = item.holder.clientWidth;
+    const targetWidth = cssWidth * renderScale * zoom;
+
+    const scale = targetWidth / baseViewport.width;
+    const viewport = page.getViewport({ scale });
+
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d", { alpha: false });
+
+    canvas.width = Math.floor(viewport.width);
+    canvas.height = Math.floor(viewport.height);
+
+    item.holder.innerHTML = "";
+    item.holder.appendChild(canvas);
+
+    await page.render({
+      canvasContext: context,
+      viewport: viewport
+    }).promise;
+
+    item.canvas = canvas;
+    item.rendered = true;
+
+  } catch (e) {
+    console.error("Erreur page " + item.number, e);
   }
 
-  document.getElementById("zoomIn").onclick = () => {
-    zoom = Math.min(zoom + 0.25, 3);
-    applyZoom();
-  };
+  item.rendering = false;
+}
 
-  document.getElementById("zoomOut").onclick = () => {
-    zoom = Math.max(zoom - 0.25, 0.75);
-    applyZoom();
-  };
+const observer = new IntersectionObserver(
+  entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const number = Number(entry.target.dataset.page);
+        const item = pages[number - 1];
 
-  document.getElementById("zoomReset").onclick = () => {
-    zoom = 1;
-    applyZoom();
-  };
+        renderPage(item);
 
-  pdfjsLib.getDocument(url).promise.then(async function(pdf) {
+        if (pages[number]) {
+          renderPage(pages[number]);
+        }
+      }
+    });
+  },
+  {
+    rootMargin: "1200px 0px"
+  }
+);
+
+async function rerenderVisiblePages() {
+  for (const item of pages) {
+    const rect = item.holder.getBoundingClientRect();
+
+    if (
+      rect.bottom > -window.innerHeight &&
+      rect.top < window.innerHeight * 2
+    ) {
+      item.rendered = false;
+      await renderPage(item);
+    }
+  }
+}
+
+document.getElementById("zoomIn").onclick = async () => {
+  zoom = Math.min(zoom + 0.25, 3);
+  container.style.width = (zoom * 100) + "%";
+
+  pages.forEach(item => {
+    item.rendered = false;
+  });
+
+  await rerenderVisiblePages();
+};
+
+document.getElementById("zoomOut").onclick = async () => {
+  zoom = Math.max(zoom - 0.25, 0.75);
+  container.style.width = (zoom * 100) + "%";
+
+  pages.forEach(item => {
+    item.rendered = false;
+  });
+
+  await rerenderVisiblePages();
+};
+
+document.getElementById("zoomReset").onclick = async () => {
+  zoom = 1;
+  container.style.width = "100%";
+
+  pages.forEach(item => {
+    item.rendered = false;
+  });
+
+  await rerenderVisiblePages();
+};
+
+pdfjsLib.getDocument(url).promise
+  .then(async loadedPdf => {
+    pdf = loadedPdf;
+
+    await createPages();
 
     loading.style.display = "none";
 
-    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+    pages.forEach(item => {
+      observer.observe(item.holder);
+    });
 
-      const page = await pdf.getPage(pageNumber);
+    await renderPage(pages[0]);
 
-      const baseViewport = page.getViewport({ scale: 1 });
-
-      const targetWidth = Math.min(
-        window.innerWidth * window.devicePixelRatio * 2.5,
-        5000
-      );
-
-      const scale = targetWidth / baseViewport.width;
-      const viewport = page.getViewport({ scale });
-
-      const canvas = document.createElement("canvas");
-      const context = canvas.getContext("2d");
-
-      canvas.width = Math.floor(viewport.width);
-      canvas.height = Math.floor(viewport.height);
-
-      container.appendChild(canvas);
-
-      await page.render({
-        canvasContext: context,
-        viewport: viewport
-      }).promise;
+    if (pages[1]) {
+      renderPage(pages[1]);
     }
-
-  }).catch(function(error) {
+  })
+  .catch(error => {
     loading.innerHTML =
       'Impossible de charger le portfolio. <a href="Portfolio.pdf">Ouvrir le PDF</a>';
+
     console.error(error);
   });
 </script>
